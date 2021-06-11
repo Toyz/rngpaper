@@ -30,7 +30,6 @@ pub struct Config {
 
     pub purity: Option<Purity>
 }
-
 impl Default for Config {
     fn default() -> Self {
         let orientation = Orientation::Landscape;
@@ -45,7 +44,17 @@ impl Default for Config {
         }
     }
 }
+impl Config {
+    #[inline]
+    pub fn get_interval(&self) -> Duration {
+        Duration::from_secs(self.interval.unwrap_or(DEFAULT_INTERVAL) * 60)
+    }
 
+    #[inline]
+    pub fn set_interval(&mut self, interval: Duration) {
+        self.interval = Some(interval.as_secs() / 60);
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
@@ -59,7 +68,8 @@ impl fmt::Display for Categories {
         write!(f, "{}{}{}",
                self.general.unwrap() as i32,
                self.anime.unwrap() as i32,
-               self.people.unwrap() as i32)
+               self.people.unwrap() as i32
+        )
     }
 }
 impl Default for Categories {
@@ -84,7 +94,8 @@ impl fmt::Display for Purity {
         write!(f, "{}{}{}",
                self.sfw.unwrap() as i32,
                self.sketchy.unwrap() as i32,
-               self.nsfw.unwrap() as i32)
+               self.nsfw.unwrap() as i32
+        )
     }
 }
 impl Default for Purity {
@@ -146,17 +157,6 @@ pub fn get_config() -> Arc<Mutex<Config>> {
         let config = toml::from_str::<Config>(&buf).expect("Can't parse config");
         Arc::new(Mutex::new(config))
     }).clone()
-}
-
-impl Config {
-    #[inline]
-    pub fn get_interval(&self) -> Duration {
-        Duration::from_secs(self.interval.unwrap_or(DEFAULT_INTERVAL) * 60)
-    }
-    #[inline]
-    pub fn set_interval(&mut self, interval: Duration) {
-        self.interval = Some(interval.as_secs() / 60);
-    }
 }
 
 
