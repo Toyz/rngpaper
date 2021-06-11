@@ -1,11 +1,14 @@
 #![windows_subsystem = "windows"]
 
 mod structs;
+mod config;
+
 extern crate native_windows_gui as nwg;
 extern crate native_windows_derive as nwd;
 #[macro_use] extern crate log;
 
 use rand::seq::SliceRandom;
+use rand::Rng;
 use wallpaper;
 use log::LevelFilter;
 use simplelog::{CombinedLogger, TermLogger, TerminalMode, Config, ColorChoice};
@@ -13,6 +16,10 @@ use nwd::NwgUi;
 use nwg::NativeUi;
 use std::thread;
 use std::fs::{remove_file};
+use reqwest::header::HeaderMap;
+use std::thread::sleep;
+use std::time::Duration;
+use log::Level::Debug;
 
 #[derive(Default, NwgUi)]
 pub struct SystemTray {
@@ -48,14 +55,19 @@ impl SystemTray {
 
      fn change_wallpaper(&self) {
          thread::spawn(|| {
-             let resp = load_all().unwrap();
+             let resp = match load_all() {
+                 Ok(data) => data,
+                 Err(e) => {
+                     error!("Error loading page {}", e);
+                     return
+                 }
+             };
              let item =  resp.choose(&mut rand::thread_rng()).unwrap();
              let prev_wallpaper = wallpaper::get().unwrap();
 
              info!("Current wallpaper: {}", prev_wallpaper);
              info!("Setting wallpaper to: {}", item.path);
              wallpaper::set_from_url(&item.path).unwrap();
-
 
              match remove_file(prev_wallpaper) {
                  Ok(_) => info!("Deleting previous wallpaper"),
@@ -71,9 +83,10 @@ impl SystemTray {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // TODO: make this configurable
     CombinedLogger::init(
         vec![
-            TermLogger::new(LevelFilter::Info, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+            TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
         ]
     )?;
 
@@ -85,22 +98,51 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn load_all() -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
-    let resp = reqwest::blocking::get("https://wallhaven.cc/api/v1/search?q=@arkas&categories=010&purity=110")?
+    let config = config::get_config();
+    let config = config.lock().expect("Lock config failed");
+    let collections = (*config).collections.as_ref().unwrap();
+    debug!("{:?}", config);
+
+    let api_key: String = match config.api_key.as_ref() {
+        Some(key) => format!("&apikey={}", key),
+        None => "".to_string()
+    };
+
+    let categories = config.categories.as_ref().unwrap();
+    let purity = config.purity.as_ref().unwrap();
+
+    let url = format!("https://wallhaven.cc/api/v1/search?q={}&categories={}&purity={}{}",
+                      collections.choose(&mut rand::thread_rng()).unwrap(),
+                      categories.to_string(),
+        purity.to_string(),
+                      api_key
+    );
+
+    let resp = reqwest::blocking::get(&url)?
         .json::<structs::Root>()?;
 
-    let mut items: Vec<structs::Data> = Vec::new();
-    items = items.iter().chain(resp.data.iter()).cloned().collect();
-
-    for n in 2..resp.meta.last_page {
-        let resp = load_page(n)?;
-        items = items.iter().chain(resp.iter()).cloned().collect();
+    if resp.meta.last_page <= 0 {
+        debug!("retrying in 250ms");
+        sleep(Duration::from_millis(250));
+        return load_all()
     }
+
+    debug!("{:?}", resp);
+    if resp.meta.last_page == 1 {
+        return Ok(resp.data)
+    }
+    let page = rand::thread_rng().gen_range(1..resp.meta.last_page);
+    if page == 1 {
+        return Ok(resp.data)
+    }
+
+    let items = load_page(page, &url)?;
 
     Ok(items)
 }
 
-fn load_page(page: i64) -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
-    let url: String = format!("https://wallhaven.cc/api/v1/search?q=@arkas&categories=010&purity=110&page={}", page);
+fn load_page(page: i64, base_url: &String) -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
+    let url: String = format!("{}&page={}", base_url, page);
 
     let resp = reqwest::blocking::get(&url)?
         .json::<structs::Root>()?;

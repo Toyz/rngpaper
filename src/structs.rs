@@ -51,8 +51,10 @@ pub struct Meta {
     pub current_page: i64,
     #[serde(rename = "last_page")]
     pub last_page: i64,
+    /*
     #[serde(rename = "per_page")]
     pub per_page: i64,
+     */
     pub total: i64,
     pub query: String,
     pub seed: ::serde_json::Value,
