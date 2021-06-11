@@ -3,13 +3,13 @@ use serde::{Serialize, Deserialize};
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Root {
-    pub data: Vec<Daum>,
+    pub data: Vec<Data>,
     pub meta: Meta,
 }
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Daum {
+pub struct Data {
     pub id: String,
     pub url: String,
     #[serde(rename = "short_url")]

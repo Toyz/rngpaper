@@ -84,11 +84,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn load_all() -> Result<Vec<structs::Daum>, Box<dyn std::error::Error>> {
+fn load_all() -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
     let resp = reqwest::blocking::get("https://wallhaven.cc/api/v1/search?q=@arkas&categories=010&purity=110")?
         .json::<structs::Root>()?;
 
-    let mut items: Vec<structs::Daum> = Vec::new();
+    let mut items: Vec<structs::Data> = Vec::new();
     items = items.iter().chain(resp.data.iter()).cloned().collect();
 
     for n in 2..resp.meta.last_page {
@@ -99,7 +99,7 @@ fn load_all() -> Result<Vec<structs::Daum>, Box<dyn std::error::Error>> {
     Ok(items)
 }
 
-fn load_page(page: i64) -> Result<Vec<structs::Daum>, Box<dyn std::error::Error>> {
+fn load_page(page: i64) -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
     let url: String = format!("https://wallhaven.cc/api/v1/search?q=@arkas&categories=010&purity=110&page={}", page);
 
     let resp = reqwest::blocking::get(&url)?
