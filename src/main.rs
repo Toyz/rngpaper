@@ -20,6 +20,7 @@ use reqwest::header::HeaderMap;
 use std::thread::sleep;
 use std::time::Duration;
 use log::Level::Debug;
+use tauri_hotkey::{HotkeyManager, parse_hotkey};
 
 #[derive(Default, NwgUi)]
 pub struct SystemTray {
@@ -53,48 +54,13 @@ impl SystemTray {
         self.tray_menu.popup(x, y);
     }
 
-     fn change_wallpaper(&self) {
-         thread::spawn(|| {
-             let resp = match load_all() {
-                 Ok(data) => data,
-                 Err(e) => {
-                     error!("Error loading page {}", e);
-                     return
-                 }
-             };
-             let item =  resp.choose(&mut rand::thread_rng()).unwrap();
-             let prev_wallpaper = wallpaper::get().unwrap();
-
-             info!("Current wallpaper: {}", prev_wallpaper);
-             info!("Setting wallpaper to: {}", item.path);
-             wallpaper::set_from_url(&item.path).unwrap();
-
-             match remove_file(prev_wallpaper) {
-                 Ok(_) => info!("Deleting previous wallpaper"),
-                 Err(e) => error!("{}", e),
-             }
-         });
+    fn change_wallpaper(&self) {
+        change_wallpaper()
     }
 
     fn exit(&self) {
         nwg::stop_thread_dispatch();
     }
-
-}
-
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // TODO: make this configurable
-    CombinedLogger::init(
-        vec![
-            TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-        ]
-    )?;
-
-    nwg::init()?;
-    let _ui = SystemTray::build_ui(Default::default())?;
-    nwg::dispatch_thread_events();
-
-    Ok(())
 }
 
 fn load_all() -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
@@ -148,4 +114,45 @@ fn load_page(page: i64, base_url: &String) -> Result<Vec<structs::Data>, Box<dyn
         .json::<structs::Root>()?;
 
     Ok(resp.data)
+}
+
+fn change_wallpaper() {
+    thread::spawn(|| {
+        let resp = match load_all() {
+            Ok(data) => data,
+            Err(e) => {
+                error!("Error loading page {}", e);
+                return
+            }
+        };
+        let item = resp.choose(&mut rand::thread_rng()).unwrap();
+        let prev_wallpaper = wallpaper::get().unwrap();
+
+        info!("Current wallpaper: {}", prev_wallpaper);
+        info!("Setting wallpaper to: {}", item.path);
+        wallpaper::set_from_url(&item.path).unwrap();
+
+        match remove_file(prev_wallpaper) {
+            Ok(_) => info!("Deleting previous wallpaper"),
+            Err(e) => error!("{}", e),
+        }
+    });
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // TODO: make this configurable
+    CombinedLogger::init(
+        vec![
+            TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
+        ]
+    )?;
+
+    let mut hkm = HotkeyManager::default();
+    hkm.register(parse_hotkey("ALT+SHIFT+R")?, change_wallpaper);
+
+    nwg::init()?;
+    let _ui = SystemTray::build_ui(Default::default())?;
+    nwg::dispatch_thread_events();
+
+    Ok(())
 }
