@@ -5,7 +5,7 @@ use serde::{Serialize, Deserialize};
 use std::env;
 use std::fs::OpenOptions;
 use fs2::FileExt;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::fmt;
 use std::fmt::Formatter;
 
@@ -159,6 +159,10 @@ pub fn get_config() -> Arc<Mutex<Config>> {
         config_file.try_lock_exclusive().expect("Other program running"); // unwrap on purpose
         let mut buf = String::new();
         config_file.read_to_string(&mut buf).expect("Can't read config file content to string");
+        if buf.is_empty() {
+            buf = toml::to_string(&Config::default()).unwrap();
+            config_file.write(buf.as_bytes());
+        }
         let config = toml::from_str::<Config>(&buf).expect("Can't parse config");
         Arc::new(Mutex::new(config))
     }).clone()
