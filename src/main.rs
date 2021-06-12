@@ -5,6 +5,7 @@ mod config;
 
 extern crate native_windows_gui as nwg;
 extern crate native_windows_derive as nwd;
+extern crate dirs;
 #[macro_use] extern crate log;
 
 use rand::seq::SliceRandom;
@@ -15,12 +16,13 @@ use simplelog::{CombinedLogger, TermLogger, TerminalMode, Config, ColorChoice};
 use nwd::NwgUi;
 use nwg::NativeUi;
 use std::thread;
-use std::fs::{remove_file};
-use reqwest::header::HeaderMap;
+use std::fs::{remove_file, create_dir_all, File,  remove_dir_all};
 use std::thread::sleep;
 use std::time::Duration;
-use log::Level::Debug;
 use tauri_hotkey::{HotkeyManager, parse_hotkey};
+use std::path::Path;
+use reqwest::Url;
+use std::borrow::Borrow;
 
 #[derive(Default, NwgUi)]
 pub struct SystemTray {
@@ -44,6 +46,10 @@ pub struct SystemTray {
     #[nwg_events(OnMenuItemSelected: [SystemTray::change_wallpaper])]
     tray_item1: nwg::MenuItem,
 
+    #[nwg_control(parent: tray_menu, text: "Empty Background Cache")]
+    #[nwg_events(OnMenuItemSelected: [SystemTray::empty_cache])]
+    tray_item2: nwg::MenuItem,
+
     #[nwg_control(parent: tray_menu, text: "Exit")]
     #[nwg_events(OnMenuItemSelected: [SystemTray::exit])]
     tray_item3: nwg::MenuItem,
@@ -56,6 +62,13 @@ impl SystemTray {
 
     fn change_wallpaper(&self) {
         change_wallpaper()
+    }
+
+    fn empty_cache(&self) {
+        let mut path = dirs::home_dir().ok_or("no path found").unwrap();
+        path = path.join(".rngpaper").join("cache");
+
+        remove_dir_all(path);
     }
 
     fn exit(&self) {
@@ -80,7 +93,7 @@ fn load_all() -> Result<Vec<structs::Data>, Box<dyn std::error::Error>> {
     let url = format!("https://wallhaven.cc/api/v1/search?q={}&categories={}&purity={}{}",
                       collections.choose(&mut rand::thread_rng()).unwrap(),
                       categories.to_string(),
-        purity.to_string(),
+                      purity.to_string(),
                       api_key
     );
 
@@ -130,12 +143,37 @@ fn change_wallpaper() {
 
         info!("Current wallpaper: {}", prev_wallpaper);
         info!("Setting wallpaper to: {}", item.path);
-        wallpaper::set_from_url(&item.path).unwrap();
 
+        let mut path = dirs::home_dir().ok_or("no path found").unwrap();
+        path = path.join(".rngpaper").join("cache");
+        create_dir_all(&path);
+
+        let url = Url::parse(item.path.as_str()).unwrap();
+        let segments = url.path_segments().ok_or("no path segments").unwrap();
+        let mut file_name = segments.last().ok_or("no file name").unwrap();
+        if file_name.is_empty() {
+            file_name = "wallpaper";
+        }
+
+        path = path.join(file_name);
+        if path.exists() {
+            wallpaper::set_from_path(path.to_str().unwrap()).unwrap();
+            return;
+        }
+
+        let mut file = File::create(&path).unwrap();
+        reqwest::blocking::get(item.path.as_str()).unwrap().copy_to(&mut file).unwrap();
+        drop(file);
+
+        info!("File path: {:?}", path);
+
+        wallpaper::set_from_path(path.to_str().unwrap()).unwrap();
+    /*
         match remove_file(prev_wallpaper) {
             Ok(_) => info!("Deleting previous wallpaper"),
             Err(e) => error!("{}", e),
         }
+     */
     });
 }
 
@@ -147,9 +185,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         ]
     )?;
 
-    let mut hkm = HotkeyManager::default();
-    hkm.register(parse_hotkey("ALT+SHIFT+R")?, change_wallpaper);
+    let config = config::get_config();
+    let config = config.lock().expect("Lock config failed");
 
+    let mut hkm = HotkeyManager::default();
+    hkm.register(parse_hotkey(config.hotkey.as_ref().unwrap())?, change_wallpaper);
+    std::mem::drop(config);
+
+    info!("Running?");
     nwg::init()?;
     let _ui = SystemTray::build_ui(Default::default())?;
     nwg::dispatch_thread_events();

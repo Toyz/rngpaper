@@ -12,7 +12,10 @@ use std::fmt::Formatter;
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct Config {
-    // Must start with @ ex (@helba)
+    // custom hotkey for background change
+    pub hotkey: Option<String>,
+
+    // must start with @ ex (@helba)
     pub collections: Option<Vec<String>>,
 
     // in minutes
@@ -34,6 +37,7 @@ impl Default for Config {
     fn default() -> Self {
         let orientation = Orientation::Landscape;
         Self {
+            hotkey: Some("ALT+SHIFT+R".to_string()),
             collections: Some(vec!["@arkas".to_string()]),
             interval: Some(DEFAULT_INTERVAL),
             orientation: Some(orientation),
@@ -145,7 +149,8 @@ const DEFAULT_INTERVAL: u64 = 10;
 
 pub fn get_config() -> Arc<Mutex<Config>> {
     CONFIG.get_or_init(|| {
-        let config_path = env::current_exe().unwrap().with_file_name("rngpaper.toml");
+        let mut config_path = dirs::home_dir().ok_or("no path found").unwrap();
+        config_path = config_path.join(".rngpaper").join("rngpaper.toml");
         let mut config_file = OpenOptions::new()
             .write(true)
             .read(true)

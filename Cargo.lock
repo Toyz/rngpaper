@@ -1427,6 +1427,7 @@ dependencies = [
 name = "rngpaper"
 version = "0.1.0"
 dependencies = [
+ "dirs",
  "embed-resource",
  "fs2",
  "log",
